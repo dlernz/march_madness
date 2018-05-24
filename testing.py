@@ -172,6 +172,8 @@ def getTeamNames():
         names[teamId] = name
     return names
 
+### Utilize historical matchup data to build RF model. Output accuracy of model
+### for input year
 def getPredictions(year):
     matchups = getMatchupData()
     matchups["baseline"] = matchups["wRPI"] < matchups["lRPI"]
@@ -179,15 +181,12 @@ def getPredictions(year):
     cols = list(matchups.columns)
     train = matchups[~matchups["w_id"].str.contains(year)]
     test = matchups[matchups["w_id"].str.contains(year)]
-    ### Baseline Model ~69% accurate using RPI to predict matchups
     baselineAcc = 1.0*sum(test["baseline"]) / test.shape[0]
-    # print baselineAcc
 
     trainLabels = np.array(train["baseline"])
     testLabels = np.array(test["baseline"])
     testNames = np.column_stack((test["lname"], test["l_id"], test["wname"], test["w_id"]))
-    # train = train.drop(["w_id", "l_id", "baseline", "wname", "lname", "lRPI", "wRPI"], axis = 1)
-    # test = test.drop(["w_id", "l_id", "baseline", "wname", "lname", "lRPI", "wRPI"], axis = 1)
+    # Drop qualitative & output columns
     train = train.drop(["w_id", "l_id", "baseline", "wname", "lname"], axis = 1)
     test = test.drop(["w_id", "l_id", "baseline", "wname", "lname"], axis = 1)
     feature_names = train.columns
@@ -196,7 +195,7 @@ def getPredictions(year):
 
     rf = RandomForestClassifier(n_estimators = 1000, random_state=32, oob_score=True)
     rf.fit(trainFeatures, trainLabels)
-    print rf.oob_score_
+    ### Draw sample classification tree
     # dot_data = StringIO()
     # export_graphviz(rf.estimators_[0], out_file=dot_data, filled=True, rounded=True, special_characters=True, feature_names=feature_names)
     # graph = pydotplus.graph_from_dot_data(dot_data.getvalue())
@@ -205,16 +204,15 @@ def getPredictions(year):
     predictions = rf.predict(testFeatures)
     predictProbs = rf.predict_proba(testFeatures)
     modelAcc = 1.0*sum(~(predictions ^ testLabels)) / predictions.shape[0]
-    print rf.feature_importances_
-    stack = np.column_stack((predictions.T, testLabels.T, testNames[:,0], testNames[:,1], testNames[:,2], testNames[:,3], predictProbs[:,0], predictProbs[:,1]))
+    # stack = np.column_stack((predictions.T, testLabels.T, testNames[:,0], testNames[:,1], testNames[:,2], testNames[:,3], predictProbs[:,0], predictProbs[:,1]))
     # print stack[stack[:,0].argsort()]
     # return stack[stack[:,0].argsort()]
     return baselineAcc, modelAcc
 
+# indPredicts = [["Predict", "Actual", "L Name", "L ID", "W Name", "W ID", "Prob For", "Prob Against"]]
 baseAccs = []
 modelAccs = []
-indPredicts = [["Predict", "Actual", "L Name", "L ID", "W Name", "W ID", "Prob For", "Prob Against"]]
-for i in range(2003, 2004):
+for i in range(2003, 2018):
     output = getPredictions(str(i))
     baseAccs.append(output[0])
     modelAccs.append(output[1])
@@ -223,10 +221,3 @@ for i in range(2003, 2004):
 # pd.DataFrame(indPredicts).to_csv("data/output/testResults.csv", index=False)
 print baseAccs
 print modelAccs
-
-# baseAccs = []
-# modelAccs = []
-# for i in range(2003, 2018):
-#     output = getPredictions(str(i))
-#     baseAccs.append(output[0])
-#     modelAccs.append(output[1])
