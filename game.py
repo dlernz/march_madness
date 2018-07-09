@@ -1,7 +1,6 @@
 class Game:
 
     def __init__(self, game):
-        print game
         self.season = game[0]
         self.dayNum = game[1]
         self.wTeamId = game[2]
