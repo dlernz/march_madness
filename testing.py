@@ -63,7 +63,6 @@ import pandas as pd
 import numpy as np
 import team, game as g
 from sklearn.ensemble import RandomForestClassifier
-
 from sklearn.tree import export_graphviz
 from sklearn.externals.six import StringIO
 from IPython.display import Image
@@ -172,8 +171,7 @@ def getTeamNames():
         names[teamId] = name
     return names
 
-### Utilize historical matchup data to build RF model. Output accuracy of model
-### for input year
+### Utilize historical matchup data to build RF model. 
 def getPredictions(year):
     matchups = getMatchupData()
     matchups["baseline"] = matchups["wRPI"] < matchups["lRPI"]
@@ -192,32 +190,37 @@ def getPredictions(year):
     feature_names = train.columns
     trainFeatures = np.array(train)
     testFeatures = np.array(test)
+    maxFeatures = int(len(feature_names)**0.5)
 
-    rf = RandomForestClassifier(n_estimators = 1000, random_state=32, oob_score=True)
+    rf = RandomForestClassifier(n_estimators = 1000, random_state=42, oob_score=True, max_features=maxFeatures)
     rf.fit(trainFeatures, trainLabels)
-    ### Draw sample classification tree
-    # dot_data = StringIO()
-    # export_graphviz(rf.estimators_[0], out_file=dot_data, filled=True, rounded=True, special_characters=True, feature_names=feature_names)
-    # graph = pydotplus.graph_from_dot_data(dot_data.getvalue())
-    # graph.write_pdf("tree.pdf")
+    ## Draw sample classification tree
+    # drawTree(rf, "sampleTree")
 
     predictions = rf.predict(testFeatures)
     predictProbs = rf.predict_proba(testFeatures)
     modelAcc = 1.0*sum(~(predictions ^ testLabels)) / predictions.shape[0]
-    # stack = np.column_stack((predictions.T, testLabels.T, testNames[:,0], testNames[:,1], testNames[:,2], testNames[:,3], predictProbs[:,0], predictProbs[:,1]))
-    # print stack[stack[:,0].argsort()]
-    # return stack[stack[:,0].argsort()]
-    return baselineAcc, modelAcc
+    stack = np.column_stack((predictions.T, testLabels.T, testNames[:,0], testNames[:,1], testNames[:,2], testNames[:,3], predictProbs[:,0], predictProbs[:,1]))
+    return stack[stack[:,0].argsort()], baselineAcc, modelAcc
 
-# indPredicts = [["Predict", "Actual", "L Name", "L ID", "W Name", "W ID", "Prob For", "Prob Against"]]
+def drawTree(rf, treeName):
+    dot_data = StringIO()
+    export_graphviz(rf.estimators_[0], out_file=dot_data, filled=True, rounded=True, special_characters=True, feature_names=feature_names)
+    graph = pydotplus.graph_from_dot_data(dot_data.getvalue())
+    graph.write_pdf("{}.pdf".format(treeName))
+
+
+indPredicts = [["Predict", "Actual", "L Name", "L ID", "W Name", "W ID", "Prob For", "Prob Against"]]
 baseAccs = []
 modelAccs = []
-for i in range(2003, 2018):
-    output = getPredictions(str(i))
-    baseAccs.append(output[0])
-    modelAccs.append(output[1])
-    # for row in output:
-    #     indPredicts.append(row.tolist())
-# pd.DataFrame(indPredicts).to_csv("data/output/testResults.csv", index=False)
+for i in range(2003, 2005):
+    output, baselineAcc, modelAcc = getPredictions(str(i))
+    baseAccs.append(baselineAcc)
+    modelAccs.append(modelAcc)
+    for row in output:
+        indPredicts.append(row.tolist())
+# pd.DataFrame(indPredicts).to_csv("data/output/testResults.csv", index=False, header=False)
 print baseAccs
 print modelAccs
+
+## ran model with 30 percent random rows from matchups: still got 100%, need to look into overfitting issues?
