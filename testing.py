@@ -145,7 +145,8 @@ def getMatchups(teams):
                 del lTeamData[key]
             matchupData = wTeamData.copy()
             matchupData.update(lTeamData)
-            matchupData.update(winnerCol)
+            matchupData["dayNum"] = dayNum
+            matchupData["season"] = season
             matchups.append(matchupData)
 
     df = pd.DataFrame.from_dict(matchups)
@@ -171,22 +172,68 @@ def getTeamNames():
         names[teamId] = name
     return names
 
-### Utilize historical matchup data to build RF model. 
-def getPredictions(year):
+def findChampionshipMatches():
     matchups = getMatchupData()
+    grouped = matchups.groupby("season")
+    matchups["chipGame"] = matchups.groupby(['season'])['dayNum'].transform(max) == matchups['dayNum']
+    return matchups
+    # # chipDays = grouped.max()["dayNum"].reset_index()
+    # print grouped.head()
+    # filtered = grouped.apply(lambda x: x["dayNum"] == x["dayNum"].argmax())
+    # # chipDays = grouped.apply(lambda x: x["dayNum"] == x["dayNum"].argmax())
+    # print chipDays
+    # chips = grouped['dayNum'].transform(max).reset_index()
+    # print chips.shape
+    # chips = grouped.aggregate(np.max).reset_index() # Need to reset index to get season as a column
+
+def getPredictionsChips():
+    matchups = findChampionshipMatches()
     matchups["baseline"] = matchups["wRPI"] < matchups["lRPI"]
-
+    # chips["baseline"] = chips["wRPI"] < chips["lRPI"]
     cols = list(matchups.columns)
-    train = matchups[~matchups["w_id"].str.contains(year)]
-    test = matchups[matchups["w_id"].str.contains(year)]
-    baselineAcc = 1.0*sum(test["baseline"]) / test.shape[0]
+    # filtered = matchups[~((matchups["season"].isin(chips["season"])) & (matchups["dayNum"].isin(chips["dayNum"])))]
 
+    train = matchups[matchups["chipGame"] == False]
+    test = matchups[matchups["chipGame"] == True]
+    baselineAcc = 1.0*sum(test["baseline"]) / test.shape[0]
+    
     trainLabels = np.array(train["baseline"])
     testLabels = np.array(test["baseline"])
     testNames = np.column_stack((test["lname"], test["l_id"], test["wname"], test["w_id"]))
     # Drop qualitative & output columns
-    train = train.drop(["w_id", "l_id", "baseline", "wname", "lname"], axis = 1)
-    test = test.drop(["w_id", "l_id", "baseline", "wname", "lname"], axis = 1)
+    train = train.drop(["w_id", "l_id", "baseline", "wname", "lname", "season", "dayNum", "chipGame"], axis = 1)
+    test = test.drop(["w_id", "l_id", "baseline", "wname", "lname", "season", "dayNum", "chipGame"], axis = 1)
+    feature_names = train.columns
+    trainFeatures = np.array(train)
+    testFeatures = np.array(test)
+    maxFeatures = int(len(feature_names)**0.5)
+
+    rf = RandomForestClassifier(n_estimators = 1000, random_state=42, oob_score=True, max_features=maxFeatures)
+    rf.fit(trainFeatures, trainLabels)
+    ## Draw sample classification tree
+    # drawTree(rf, "sampleTree")
+
+    predictions = rf.predict(testFeatures)
+    predictProbs = rf.predict_proba(testFeatures)
+    modelAcc = 1.0*sum(~(predictions ^ testLabels)) / predictions.shape[0]
+    stack = np.column_stack((predictions.T, testLabels.T, testNames[:,0], testNames[:,1], testNames[:,2], testNames[:,3], predictProbs[:,0], predictProbs[:,1]))
+    return stack[stack[:,0].argsort()], baselineAcc, modelAcc
+
+### Utilize historical matchup data to build RF model. 
+def getPredictions(year, train=None, test=None):
+    matchups = getMatchupData()
+    matchups["baseline"] = matchups["wRPI"] < matchups["lRPI"]
+    cols = list(matchups.columns)
+    train = matchups[~matchups["w_id"].str.contains(year)]
+    test = matchups[matchups["w_id"].str.contains(year)]
+    baselineAcc = 1.0*sum(test["baseline"]) / test.shape[0]
+    
+    trainLabels = np.array(train["baseline"])
+    testLabels = np.array(test["baseline"])
+    testNames = np.column_stack((test["lname"], test["l_id"], test["wname"], test["w_id"]))
+    # Drop qualitative & output columns
+    train = train.drop(["w_id", "l_id", "baseline", "wname", "lname", "season", "dayNum"], axis = 1)
+    test = test.drop(["w_id", "l_id", "baseline", "wname", "lname", "season", "dayNum"], axis = 1)
     feature_names = train.columns
     trainFeatures = np.array(train)
     testFeatures = np.array(test)
@@ -213,14 +260,20 @@ def drawTree(rf, treeName):
 indPredicts = [["Predict", "Actual", "L Name", "L ID", "W Name", "W ID", "Prob For", "Prob Against"]]
 baseAccs = []
 modelAccs = []
-for i in range(2003, 2005):
-    output, baselineAcc, modelAcc = getPredictions(str(i))
-    baseAccs.append(baselineAcc)
-    modelAccs.append(modelAcc)
-    for row in output:
-        indPredicts.append(row.tolist())
+# for i in range(2003, 2005):
+#     output, baselineAcc, modelAcc = getPredictions(str(i))
+#     baseAccs.append(baselineAcc)
+#     modelAccs.append(modelAcc)
+#     for row in output:
+#         indPredicts.append(row.tolist())
 # pd.DataFrame(indPredicts).to_csv("data/output/testResults.csv", index=False, header=False)
-print baseAccs
-print modelAccs
+# print baseAccs
+# print modelAccs
 
+# Chip testing
+output, baselineAcc, modelAcc = getPredictionsChips()
+print baselineAcc, modelAcc
+for row in output:
+    indPredicts.append(row.tolist())
+pd.DataFrame(indPredicts).to_csv("data/output/chipTestResults.csv", index=False, header=False)
 ## ran model with 30 percent random rows from matchups: still got 100%, need to look into overfitting issues?
