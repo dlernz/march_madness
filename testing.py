@@ -1,64 +1,3 @@
-"""
-- Conference tournament success (# of wins) 
-    - Source: ConferenceTourneyGames.csv
-    - Method to count number of wins for each team
-- SOS
-    - Source: MasseyOrdinals_Prelim2018.csv
-    - RPI column -- day closest to 132
-- Pace/# of possessions 
-    - Source: RegularSeasonDetailedResults.csv
-    - Possessions = FGA-OR+TO+.475*FTA
-- Defensive Efficiency 
-    - Source: RegularSeasonDetailedResults.csv
-    - 100*Pts Allowed_a / Possessions_a + 100*Pts Allowed_b / Possessions_b ... / n_games
-- Offensive Efficiency 
-    - Source: RegularSeasonDetailedResults.csv
-    - See above 
-- 3P EFG%
-    - Source: RegularSeasonDetailedResults.csv
-- EFG%
-    - Source: RegularSeasonDetailedResults.csv
-- Off Rebounding
-    - Source: RegularSeasonDetailedResults.csv
-- Def Rebounding
-    - Source: RegularSeasonDetailedResults.csv
-- Turnovers Given
-    - Source: RegularSeasonDetailedResults.csv
-- Turnovers Forced
-    - Source: RegularSeasonDetailedResults.csv
-- Free throw percentage
-    - Source: RegularSeasonDetailedResults.csv
-- Free throws attempted 
-    - Source: RegularSeasonDetailedResults.csv
-- Margin of Victory
-    - Source: RegularSeasonDetailedResults.csv
-    - WScore - LScore
-- Margin of Loss
-    - Source: RegularSeasonDetailedResults.csv
-    - WScore - LScore
-- # of Wins against Tournament Teams
-    - Source: RegularSeasonDetailedResults.csvgit
-    - Needs to be calculated --- team plays games past day 132
-- Repeated for Opponent^^^
-
-[Matchup 1, M2, M3....] --> Matchup 1: [Team1, Team2]
-Get season stats for team1, team2 --> access stored stats for all teams in a season (Doc S)
-S has end of season stats listed above for each team for multiple seasons
-
-- Get percentage of win/loss for each possible matchup using random forest with tests data (2018 games)
-- Training data is tourney data from previous years 
-
-Winner: Team or Opponent What were tryna classify 
-Sample Row Team1Wins, Team1Stats, Team2Stats
-
-### Model Creation
-Training Data: team stats at end of season/matchups in tournament (2003-2016)
-EndOfSeasonStats: TeamId, Stat1SeasonAvg, Stat2SeasonAvg...StatNSeasonAvg
-Matchups: WinTeamId, LTeamId, WScore, LScore Source: "NCAATourneyCompactResults.csv"
-Test Data: matchups in 2017 season
-
-Baseline: Choosing matchup based on RPI
-"""
 import pandas as pd 
 import numpy as np
 import team, game as g
@@ -68,7 +7,11 @@ from sklearn.externals.six import StringIO
 from IPython.display import Image
 import pydotplus
 
-def populateNCAATourneyTeams():
+def getNCAATeamIds():
+    """
+    Read in results of NCAA games and assign each result an id 
+    for the winning team and losing team. Output a dictionary with each team's ID
+    """
     ncaaTourneyTeams = {}
     ncaaTournResults = pd.read_csv("data/NCAATourneyCompactResults.csv")
     for index, row in ncaaTournResults.iterrows():
@@ -85,7 +28,22 @@ def populateNCAATourneyTeams():
             ncaaTourneyTeams[customLId] = 1
     return ncaaTourneyTeams
 
+def getTeamNames():
+    """
+    Return dictionary where key is team ID and value is team name
+    """
+    names = {}
+    teams = pd.read_csv("Data/Teams.csv")
+    for index, row in teams.iterrows():
+        teamId = row["TeamID"]
+        name = row["TeamName"]
+        names[teamId] = name
+    return names
+
 def getSeasonStats(ncaaTourneyTeams):
+    """
+    Use regular season results and RPI rankings to create a dictionary where key is the team's ID and the value is a Team object. Team objects contain yearly avg stats for each team in various categories
+    """
     teams = {}
     names = getTeamNames()
     unfiltRanks = pd.read_csv("data/MasseyOrdinals_Prelim2018.csv")
@@ -124,6 +82,9 @@ def getSeasonStats(ncaaTourneyTeams):
     return teams
 
 def getMatchups(teams):
+    """
+    Use NCAA Tournament results to return data frame of matchups where each row contains data for one matchup between two teams, including their yearly avg totals in statistical categories, RPI, and game result.
+    """
     matchups = []
     ncaaTournResults = pd.read_csv("data/NCAATourneyCompactResults.csv")
     for index, row in ncaaTournResults.iterrows():
@@ -153,6 +114,10 @@ def getMatchups(teams):
     return df
 
 def getMatchupData():
+    """
+    Returns data frame of historical matchups in NCAA tournament.
+    Reads in existing CSV if available. Otherwise, produces data frame by creating Team objects, calculating yearly avg totals for each team, and joining with historical NCAA tourney matchup data
+    """
     try:
         matchups = pd.read_csv("Data/output/matchups.csv")
         return matchups
@@ -163,18 +128,13 @@ def getMatchupData():
         matchups.to_csv("Data/output/matchups.csv", index=False)
         return matchups
 
-def getTeamNames():
-    names = {}
-    teams = pd.read_csv("Data/Teams.csv")
-    for index, row in teams.iterrows():
-        teamId = row["TeamID"]
-        name = row["TeamName"]
-        names[teamId] = name
-    return names
-
 def findChampionshipMatches():
     matchups = getMatchupData()
     grouped = matchups.groupby("season")
+    ## group by season 
+    ## with resulting groupby obj, find whether each row equals the dayNum max for each group
+    ## store result as column in matchups defining whether championship played that day
+    ## able to pass in functions to transform to perform calculations for each group
     matchups["chipGame"] = matchups.groupby(['season'])['dayNum'].transform(max) == matchups['dayNum']
     return matchups
     # # chipDays = grouped.max()["dayNum"].reset_index()
