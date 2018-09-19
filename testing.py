@@ -7,27 +7,6 @@ from sklearn.externals.six import StringIO
 from IPython.display import Image
 import pydotplus
 
-def getNCAATeamIds():
-    """
-    Read in results of NCAA games and assign each result an id 
-    for the winning team and losing team. Output a dictionary with each team's ID
-    """
-    ncaaTourneyTeams = {}
-    ncaaTournResults = pd.read_csv("data/NCAATourneyCompactResults.csv")
-    for index, row in ncaaTournResults.iterrows():
-        season = row["Season"]
-        dayNum = row["DayNum"]
-        wTeamId = row["WTeamID"]
-        lTeamId = row["LTeamID"]
-        customWId = str(wTeamId) + "_" + str(season)
-        customLId = str(lTeamId) + "_" + str(season)
-
-        if customWId not in ncaaTourneyTeams:
-            ncaaTourneyTeams[customWId] = 1
-        if customLId not in ncaaTourneyTeams:
-            ncaaTourneyTeams[customLId] = 1
-    return ncaaTourneyTeams
-
 def getTeamNames():
     """
     Return dictionary where key is team ID and value is team name
@@ -129,29 +108,24 @@ def getMatchupData():
         return matchups
 
 def findChampionshipMatches():
+    """
+    Read in NCAA tourney matchups and return data frame containing additional column denoting (True/False) if that matchup was a championship game. 
+    """
     matchups = getMatchupData()
-    grouped = matchups.groupby("season")
-    ## group by season 
-    ## with resulting groupby obj, find whether each row equals the dayNum max for each group
+    ## group by season and with resulting groupby obj, find whether each row equals the dayNum max for each group
     ## store result as column in matchups defining whether championship played that day
     ## able to pass in functions to transform to perform calculations for each group
     matchups["chipGame"] = matchups.groupby(['season'])['dayNum'].transform(max) == matchups['dayNum']
     return matchups
-    # # chipDays = grouped.max()["dayNum"].reset_index()
-    # print grouped.head()
-    # filtered = grouped.apply(lambda x: x["dayNum"] == x["dayNum"].argmax())
-    # # chipDays = grouped.apply(lambda x: x["dayNum"] == x["dayNum"].argmax())
-    # print chipDays
-    # chips = grouped['dayNum'].transform(max).reset_index()
-    # print chips.shape
-    # chips = grouped.aggregate(np.max).reset_index() # Need to reset index to get season as a column
 
 def getPredictionsChips():
+    """
+    Output predictions for all championship games from 2003-2017 using a Random Forest classifier. Baseline model takes team with lower RPI as winner. 
+    Returns a tuple consisting of a data frame containing the model's prediction for every matchup in our test dataset, the baseline model's accuracy, our model's accuracy
+    """
     matchups = findChampionshipMatches()
     matchups["baseline"] = matchups["wRPI"] < matchups["lRPI"]
-    # chips["baseline"] = chips["wRPI"] < chips["lRPI"]
     cols = list(matchups.columns)
-    # filtered = matchups[~((matchups["season"].isin(chips["season"])) & (matchups["dayNum"].isin(chips["dayNum"])))]
 
     train = matchups[matchups["chipGame"] == False]
     test = matchups[matchups["chipGame"] == True]
@@ -181,6 +155,10 @@ def getPredictionsChips():
 
 ### Utilize historical matchup data to build RF model. 
 def getPredictions(year, train=None, test=None):
+    """
+        Output predictions for games from test data set using a Random Forest classifier. Baseline model takes team with lower RPI as winner. 
+    Returns a tuple consisting of a data frame containing the model's prediction for every matchup in our test dataset, the baseline model's accuracy, our model's accuracy
+    """
     matchups = getMatchupData()
     matchups["baseline"] = matchups["wRPI"] < matchups["lRPI"]
     cols = list(matchups.columns)
@@ -211,6 +189,9 @@ def getPredictions(year, train=None, test=None):
     return stack[stack[:,0].argsort()], baselineAcc, modelAcc
 
 def drawTree(rf, treeName):
+    """
+    Draws a visual representation of random forest from input classifier and saves as PDF
+    """
     dot_data = StringIO()
     export_graphviz(rf.estimators_[0], out_file=dot_data, filled=True, rounded=True, special_characters=True, feature_names=feature_names)
     graph = pydotplus.graph_from_dot_data(dot_data.getvalue())
