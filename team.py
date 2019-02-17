@@ -19,6 +19,7 @@ class Team:
         self.winsVsTourney = 0
         self.confTournWins = 0
         self.RPI = None
+        self.score = 0
 
     def updateStats(self, game, won):
         self.numGamesPlayed += 1
@@ -61,6 +62,14 @@ class Team:
             return game["WFGA"] - game["WOR"] + game["WTO"] + (0.4 * game["WFTA"])
         else:
             return game["LFGA"] - game["LOR"] + game["LTO"] + (0.4 * game["LFTA"])
-
+        
+    def setScore(self):
+        try:
+            oScore = .5*self.oEff + .4*self.EFG + .2*self.ORB + .05*self.FTA + .1*self.FTP - .25*self.TO
+            dScore = .5*self.dEff + .2*self.DRB + .25+self.TOF
+            self.score = .5*self.RPI + oScore + dScore
+        except:
+            self.score = -1
+        
     def objToDict(self):
         return self.__dict__
